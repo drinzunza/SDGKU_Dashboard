@@ -1,278 +1,387 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
-from streamlit_calendar import calendar # Community component
-import re # For parsing unit names
+from datetime import datetime, date
+from streamlit_calendar import calendar
+import re
+import json
+import os # For file existence check
 
-st.set_page_config(layout="wide", page_title="FSDI/MDI Cohort & Unit Calendar")
+st.set_page_config(layout="wide", page_title="Cohort & Unit Calendar")
 
-# --- Helper Functions ---
-@st.cache_data # Cache the data loading
-def load_data(uploaded_file):
-    if uploaded_file is not None:
+CONFIG_FILE = "config.json"
+MASTER_SCHEDULE_FILE = "master_schedule.csv"
+
+# --- Configuration Management ---
+def load_config():
+    if os.path.exists(CONFIG_FILE):
         try:
-            # Explicitly set dtype to string for all columns during loading
-            # This helps prevent pandas from auto-interpreting numbers as floats etc.
-            df = pd.read_csv(uploaded_file, dtype=str)
-
-            if df.empty or 'Date' not in df.columns:
-                st.error("CSV must have a 'Date' column as the first column.")
-                return None, [], []
-            
-            # All columns except the first one ('Date') are considered cohort columns
-            cohort_cols = list(df.columns[1:]) # Get all column names from the second onwards
-            
-            if not cohort_cols:
-                st.error("No cohort columns found (expected columns after 'Date').")
-                return None, [], []
-
-            # Extract unique unit names (e.g., FSDI 101, MDI-1 102) from the cohort columns
-            all_units = set()
-            for col in cohort_cols:
-                # Ensure the column exists and handle potential missing values correctly
-                if col in df:
-                    # Drop NA before unique, and ensure values are strings
-                    unique_values_in_col = df[col].astype(str).replace('nan', '').dropna().unique()
-                    for val in unique_values_in_col:
-                        cleaned_val = val.strip()
-                        if cleaned_val and cleaned_val.lower() != "orientation":
-                            all_units.add(cleaned_val)
-            
-            sorted_units = sorted(list(all_units))
-            return df, cohort_cols, sorted_units
+            with open(CONFIG_FILE, 'r') as f:
+                config_data = json.load(f)
+                st.session_state.event_colors = config_data.get('event_colors', get_default_colors())
+                st.session_state.teacher_assignments = config_data.get('teacher_assignments', {})
+                st.session_state.all_known_teachers = set(config_data.get('all_known_teachers', []))
+                return
         except Exception as e:
-            st.error(f"Error loading CSV: {e}")
-            return None, [], []
-    return None, [], []
+            st.error(f"Error loading {CONFIG_FILE}: {e}. Using defaults.")
+    st.session_state.event_colors = get_default_colors()
+    st.session_state.teacher_assignments = {}
+    st.session_state.all_known_teachers = set()
 
-def parse_date_from_string(date_str):
-    if pd.isna(date_str) or not isinstance(date_str, str): # Added check for string type
-        return None
+def get_default_colors():
+    return {
+        "FSDI": "#1f77b4", "MDI1": "#ff7f0e", "MDI2": "#2ca02c",
+        "ORIENTATION": "#d62728", "DEFAULT": "#7f7f7f"
+    }
+
+def save_config():
+    config_data = {
+        'event_colors': st.session_state.event_colors,
+        'teacher_assignments': st.session_state.teacher_assignments,
+        'all_known_teachers': sorted(list(st.session_state.all_known_teachers))
+    }
     try:
-        date_part = date_str.split(',')[-1].strip()
-        return datetime.strptime(date_part, "%m/%d/%y")
-    except ValueError:
-        try:
-            date_part = date_str.split(',')[-1].strip()
-            return datetime.strptime(date_part, "%m/%d/%Y")
-        except Exception:
-            return None
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(config_data, f, indent=4)
+    except Exception as e:
+        st.error(f"Error saving {CONFIG_FILE}: {e}")
 
-def get_slot_info(date_str):
-    if pd.isna(date_str) or not isinstance(date_str, str): # Added check for string type
-        return ""
-    parts = date_str.split(',')
-    return parts[0].strip() if len(parts) > 1 else ""
+if 'event_colors' not in st.session_state:
+    load_config()
+
+# --- Master Schedule Data Management ---
+# @st.cache_data(ttl=300) # Consider re-enabling caching after debugging
+def load_master_schedule(): # Temporarily removing cache for easier debugging of this load
+    if os.path.exists(MASTER_SCHEDULE_FILE):
+        try:
+            df = pd.read_csv(MASTER_SCHEDULE_FILE, dtype=str)
+            if not all(col in df.columns for col in ['OriginalDateString', 'CohortName', 'UnitActivity']):
+                 st.warning(f"{MASTER_SCHEDULE_FILE} is missing required columns.")
+                 return pd.DataFrame(columns=['OriginalDateString', 'CohortName', 'UnitActivity', 'ParsedDate'])
+            
+            df['ParsedDate_temp'] = df['OriginalDateString'].apply(parse_master_schedule_date_string)
+            df['ParsedDate'] = pd.to_datetime(df['ParsedDate_temp'], errors='coerce')
+            df_cleaned = df.dropna(subset=['ParsedDate'])
+            return df_cleaned[['OriginalDateString', 'CohortName', 'UnitActivity', 'ParsedDate']]
+        except Exception as e:
+            st.error(f"Error loading {MASTER_SCHEDULE_FILE}: {e}")
+            return pd.DataFrame(columns=['OriginalDateString', 'CohortName', 'UnitActivity', 'ParsedDate'])
+    return pd.DataFrame(columns=['OriginalDateString', 'CohortName', 'UnitActivity', 'ParsedDate'])
+
+def parse_master_schedule_date_string(date_str):
+    if pd.isna(date_str) or not str(date_str).strip(): return None
+    date_str_clean = str(date_str).strip()
+    try: return datetime.strptime(date_str_clean, "%m/%d/%Y").date()
+    except ValueError:
+        try: return datetime.strptime(date_str_clean, "%m/%d/%y").date()
+        except ValueError: return None
+
+def append_to_master_schedule(new_data_df):
+    if new_data_df.empty: return
+    try:
+        expected_cols = ['OriginalDateString', 'CohortName', 'UnitActivity']
+        if not all(col in new_data_df.columns for col in expected_cols):
+            st.error("New data missing required columns.")
+            return False
+        if os.path.exists(MASTER_SCHEDULE_FILE):
+            try:
+                master_df = pd.read_csv(MASTER_SCHEDULE_FILE, dtype=str)
+                if not all(col in master_df.columns for col in expected_cols):
+                    st.warning(f"{MASTER_SCHEDULE_FILE} malformed. Overwriting.")
+                    updated_df = new_data_df.copy()
+                else:
+                    updated_df = pd.concat([master_df, new_data_df], ignore_index=True)
+            except pd.errors.EmptyDataError:
+                updated_df = new_data_df.copy()
+            except Exception as e_read:
+                st.error(f"Read error for {MASTER_SCHEDULE_FILE}: {e_read}. Overwriting.")
+                updated_df = new_data_df.copy()
+        else:
+            updated_df = new_data_df.copy()
+        
+        for col in expected_cols:
+            if col in updated_df: updated_df[col] = updated_df[col].astype(str)
+        updated_df.to_csv(MASTER_SCHEDULE_FILE, index=False)
+        # st.cache_data.clear() # If caching is re-enabled
+        return True
+    except Exception as e:
+        st.error(f"Append error {MASTER_SCHEDULE_FILE}: {e}")
+        return False
+
+def parse_new_cohort_schedule_input(raw_text_input):
+    lines = raw_text_input.strip().split('\n')
+    if not lines: return pd.DataFrame()
+    cohort_name = lines[0].strip()
+    if not cohort_name:
+        st.error("First line must be Cohort Name.")
+        return pd.DataFrame()
+    schedule_entries = []
+    for line in lines[1:]:
+        parts = line.strip().split('\t')
+        date_str, unit_activity = None, ""
+        if len(parts) == 3: date_str, unit_activity = parts[1].strip(), parts[2].strip()
+        elif len(parts) == 2 and re.match(r'\d{1,2}/\d{1,2}/\d{2,4}', parts[0].strip()):
+             date_str, unit_activity = parts[0].strip(), parts[1].strip()
+        
+        if date_str:
+            schedule_entries.append({
+                'OriginalDateString': date_str, 'CohortName': cohort_name,
+                'UnitActivity': unit_activity if unit_activity else ""
+            })
+    return pd.DataFrame(schedule_entries)
 
 def get_actual_unit_from_cell(cell_value):
-    if pd.isna(cell_value): # Pandas uses pd.NA or None for missing after dtype=str
-        return None
-    
-    # Ensure cell_value is treated as a string
+    if pd.isna(cell_value): return None
     cell_value_str = str(cell_value).strip()
-    
-    if not cell_value_str or cell_value_str.lower() == "orientation" or cell_value_str.lower() == 'nan':
-        return None
-    return cell_value_str
+    if not cell_value_str or cell_value_str.lower() in ["orientation", 'nan']: return None
+    match = re.search(r'\b(\d{3})\b', cell_value_str)
+    return match.group(1) if match else cell_value_str
 
+def get_unit_type_for_color(unit_name_full):
+    if pd.isna(unit_name_full) or not unit_name_full: return "DEFAULT"
+    uname = str(unit_name_full).upper()
+    if "FSDI" in uname: return "FSDI"
+    if "MDI1" in uname or "MDI-1" in uname: return "MDI1"
+    if "MDI2" in uname or "MDI-2" in uname: return "MDI2"
+    if "ORIENTATION" in uname: return "ORIENTATION"
+    return "DEFAULT"
 
-def generate_calendar_events(df, selected_cohorts, selected_units, selected_year, selected_month):
+def parse_teacher_assignment_data(raw_data):
+    assignments = {}; current_cohort = None; teachers_found = set()
+    for line in raw_data.splitlines():
+        line = line.strip()
+        if not line: continue
+        if (line.upper().startswith("COHORT ") or "CH " in line.upper()) and "\t" not in line and not re.match(r"^\d{3}\s", line):
+            current_cohort = line; assignments[current_cohort] = {}
+        elif current_cohort and ("\t" in line or len(line.split()) >= 2):
+            parts = re.split(r'\s+|\t', line, 1)
+            if len(parts) == 2:
+                unit, teacher = parts[0].strip(), parts[1].strip()
+                if unit and teacher:
+                    unit_key = re.match(r'(\d+)', unit).group(1) if re.match(r'(\d+)', unit) else unit
+                    assignments[current_cohort][unit_key] = teacher; teachers_found.add(teacher)
+    return assignments, teachers_found
+
+def generate_calendar_events_from_master(df_master, selected_cohorts, selected_units_full, selected_teachers, selected_year, selected_month):
     events = []
-    if df is None or df.empty:
+    if df_master is None or df_master.empty: return events
+    if 'ParsedDate' not in df_master.columns or not pd.api.types.is_datetime64_any_dtype(df_master['ParsedDate']):
+        st.error("ParsedDate column issue in master data.")
         return events
-
-    # Ensure 'parsed_date' column exists or is created
-    if 'parsed_date' not in df.columns or df['parsed_date'].isnull().all(): # Re-parse if mostly null
-        df['parsed_date'] = df['Date'].apply(parse_date_from_string)
-        df_filtered_dates = df.dropna(subset=['parsed_date'])
-    else:
-        df_filtered_dates = df
-
-    if df_filtered_dates.empty: # Check after parsing
-        st.warning("No valid dates to process after parsing.")
-        return events
-
-    df_month = df_filtered_dates[
-        (df_filtered_dates['parsed_date'].dt.year == selected_year) &
-        (df_filtered_dates['parsed_date'].dt.month == selected_month)
-    ]
-
+    try:
+        df_month_year_filtered = df_master[
+            (df_master['ParsedDate'].dt.year == selected_year) &
+            (df_master['ParsedDate'].dt.month == selected_month)
+        ]
+    except AttributeError: st.error("Error accessing .dt on ParsedDate."); return events
+    if df_month_year_filtered.empty: return events
+    df_month = df_month_year_filtered[df_month_year_filtered['CohortName'].isin(selected_cohorts)]
+    if df_month.empty: return events
+        
     for index, row in df_month.iterrows():
-        event_date = row['parsed_date']
-        date_str_full = row['Date'] # This is already a string from CSV load
-        slot_detail = get_slot_info(date_str_full)
+        event_py_datetime_obj = row['ParsedDate']
+        event_py_date_obj = event_py_datetime_obj.date()
+        cohort_name = row['CohortName']; unit_activity_full = str(row['UnitActivity']).strip()
+        actual_unit_activity_display = unit_activity_full if unit_activity_full else "No Activity"
 
-        for cohort_name in selected_cohorts:
-            if cohort_name in df_month.columns and pd.notna(row[cohort_name]):
-                cell_content = str(row[cohort_name]).strip() # Ensure string for "nan" comparison
-                
-                if cell_content.lower() == 'nan': # Skip if cell content is string 'nan'
-                    continue
+        display_event = False
+        if not selected_units_full: display_event = True
+        elif actual_unit_activity_display.lower() == "orientation" and "Orientation" in selected_units_full: display_event = True
+        elif actual_unit_activity_display in selected_units_full: display_event = True
+        if not display_event: continue
 
-                actual_unit_in_cell = get_actual_unit_from_cell(cell_content)
+        teacher_name = ""
+        unit_key_teacher = get_actual_unit_from_cell(actual_unit_activity_display)
+        if cohort_name in st.session_state.teacher_assignments and \
+           unit_key_teacher in st.session_state.teacher_assignments[cohort_name]:
+            teacher_name = st.session_state.teacher_assignments[cohort_name][unit_key_teacher]
+        if selected_teachers and teacher_name not in selected_teachers:
+            if not (not teacher_name and "Unassigned" in selected_teachers): continue
 
-                if not selected_units or \
-                   (actual_unit_in_cell and actual_unit_in_cell in selected_units) or \
-                   (cell_content.lower() == "orientation" and "Orientation" in selected_units):
-
-                    title = f"{cohort_name}: {cell_content}"
-                    if "Saturday" in slot_detail:
-                        if "(9 am - 12 pm)" in slot_detail:
-                            title = f"{cohort_name} (AM): {cell_content}"
-                        elif "(12 pm - 3 pm)" in slot_detail:
-                            title = f"{cohort_name} (PM): {cell_content}"
-                    
-                    events.append({
-                        "title": title,
-                        "start": event_date.strftime("%Y-%m-%d"),
-                    })
+        title = f"{cohort_name}: {actual_unit_activity_display}"
+        if teacher_name: title += f" ({teacher_name})"
+        color = st.session_state.event_colors.get(get_unit_type_for_color(actual_unit_activity_display), st.session_state.event_colors["DEFAULT"])
+        
+        events.append({
+            "title": title, "start": event_py_date_obj.strftime("%Y-%m-%d"), "color": color,
+            "extendedProps": {"teacher": teacher_name, "cohort": cohort_name, "unit": actual_unit_activity_display}
+        })
     return events
 
-# --- Streamlit App UI ---
-st.title("📅 SDGKU Unit Dashboard Calendar")
+# --- Main Application ---
+master_schedule_df = load_master_schedule()
 
-uploaded_file = st.file_uploader("Upload your FSDI_corrected_schedule.csv file", type="csv")
+tab_calendar, tab_data_management, tab_config = st.tabs(["📅 Calendar View", "💾 Data Management", "⚙️ Configuration"])
 
-df, cohort_columns, available_units = load_data(uploaded_file)
-
-if df is not None and not df.empty:
-    st.sidebar.header("🗓️ Calendar View Options")
+with tab_config:
+    st.header("Event Color Configuration")
+    # ... (color config remains the same) ...
+    cols_color = st.columns(len(st.session_state.event_colors))
+    color_keys = list(st.session_state.event_colors.keys())
+    config_changed_colors = False
+    for i, key_c in enumerate(color_keys):
+        new_color = cols_color[i].color_picker(f"{key_c} Color", st.session_state.event_colors[key_c], key=f"color_{key_c}")
+        if new_color != st.session_state.event_colors[key_c]:
+            st.session_state.event_colors[key_c] = new_color
+            config_changed_colors = True
     
-    # --- Date Parsing and Month/Year Selection ---
-    # It's critical that 'parsed_date' is created and valid
-    if 'parsed_date' not in df.columns or df['parsed_date'].isnull().all():
-         df['parsed_date'] = df['Date'].astype(str).apply(parse_date_from_string) # Ensure Date is str
-         df = df.dropna(subset=['parsed_date'])
+    st.header("Teacher Assignments")
+    st.markdown("Paste: COHORT_NAME_EXACT_FROM_SCHEDULE then UNIT_NUM Teacher") # Simplified markdown
+    teacher_data_input_area = st.text_area("Teacher Assignment Data:", height=300, key="teacher_config_input_area") # Renamed key
+    config_changed_teachers = False
+    if st.button("Update Teacher Assignments From Text", key="update_teacher_config_btn"):
+        if teacher_data_input_area: # Use renamed variable
+            parsed_assignments, teachers_found = parse_teacher_assignment_data(teacher_data_input_area) # Use renamed variable
+            st.session_state.teacher_assignments.update(parsed_assignments)
+            st.session_state.all_known_teachers.update(teachers_found)
+            config_changed_teachers = True
+            st.success("Teacher assignments updated from text!")
+            # teacher_data_input_area = "" # This would require JS to clear, st.text_area doesn't clear itself on rerun
+        else: st.warning("No teacher data pasted.")
+    
+    if config_changed_colors or config_changed_teachers: # Check if any config changed
+        save_config()
 
-    if df.empty or ('parsed_date' in df and df['parsed_date'].empty) or df['parsed_date'].isnull().all():
-        st.warning("No valid dates found in the uploaded CSV after parsing. Please check the 'Date' column format.")
-    else:
-        min_date = df['parsed_date'].min()
-        available_year_months = sorted(list(set(
-            (d.year, d.month) for d in pd.to_datetime(df['parsed_date'].dropna().unique()) if pd.notna(d) # Dropna before unique
-        )))
+    if st.session_state.teacher_assignments:
+        with st.expander("Current Teacher Assignments (from config)"):
+            st.json(st.session_state.teacher_assignments)
+
+with tab_data_management:
+    st.header("Add New Cohort Schedule Data")
+    # ... (data management markdown remains the same) ...
+    st.markdown("""Paste: COHORT_NAME then DayOfWeek<Tab>MM/DD/YYYY<Tab>UnitActivity""")
+    new_schedule_input_area = st.text_area("Paste New Schedule Data Here:", height=400, key="new_schedule_text_area_input") # Renamed key
+    if st.button("Add This Schedule to Master File", key="add_new_schedule_btn"):
+        if new_schedule_input_area: # Use renamed variable
+            new_df = parse_new_cohort_schedule_input(new_schedule_input_area) # Use renamed variable
+            if not new_df.empty:
+                if append_to_master_schedule(new_df):
+                    st.success(f"Added {len(new_df)} entries for '{new_df['CohortName'].iloc[0]}' to {MASTER_SCHEDULE_FILE}.")
+                    master_schedule_df = load_master_schedule() # Reload after append
+                    # new_schedule_input_area = "" # Similar to above, won't clear itself
+                else: st.error("Failed to add data.")
+            else: st.warning("No valid data parsed from input.")
+        else: st.warning("No schedule data pasted.")
+            
+    st.subheader(f"Current Master Schedule ({MASTER_SCHEDULE_FILE})")
+    if not master_schedule_df.empty:
+        st.caption(f"Total entries: {len(master_schedule_df)}")
+        st.dataframe(master_schedule_df.tail(100))
+    else: st.caption(f"{MASTER_SCHEDULE_FILE} is empty or not found.")
+
+# THIS IS WHERE THE CALENDAR TAB LOGIC STARTS - ENSURE IT'S NOT INDENTED UNDER OTHER TABS
+with tab_calendar:
+    st.title("📅 SDGKU Class Calendar")
+    st.sidebar.title("🗓️ Filters")
+
+    # Crucial: Ensure master_schedule_df is the one loaded at the top level of the script
+    # and is valid before proceeding.
+    if master_schedule_df is not None and not master_schedule_df.empty and \
+       'ParsedDate' in master_schedule_df and pd.api.types.is_datetime64_any_dtype(master_schedule_df['ParsedDate']) and \
+       not master_schedule_df['ParsedDate'].isnull().all():
+
+        all_cohort_names_master = sorted(master_schedule_df['CohortName'].astype(str).unique())
+        all_unit_activities_master = sorted(master_schedule_df['UnitActivity'].astype(str).replace('nan','', regex=False).dropna().unique())
+        all_unit_activities_master = [u for u in all_unit_activities_master if u.strip() and u.lower() != 'orientation']
+
+        min_date_master_ts = master_schedule_df['ParsedDate'].min() # pandas Timestamp
+        max_date_master_ts = master_schedule_df['ParsedDate'].max() # pandas Timestamp
+
+        available_year_months = []
+        if pd.notna(min_date_master_ts) and pd.notna(max_date_master_ts):
+            # Convert Timestamps to Python datetime.date objects for consistent comparison
+            min_date_py = min_date_master_ts.date()
+            max_date_py = max_date_master_ts.date()
+
+            current_loop_date_py = min_date_py # Use Python date for loop
+            while current_loop_date_py <= max_date_py: # Compare date with date
+                ym = (current_loop_date_py.year, current_loop_date_py.month)
+                if ym not in available_year_months:
+                    available_year_months.append(ym)
+                
+                # Increment month for Python date object
+                if current_loop_date_py.month == 12:
+                    # Stop if next year would exceed max_date_py
+                    if current_loop_date_py.year + 1 > max_date_py.year:
+                        break
+                    current_loop_date_py = date(current_loop_date_py.year + 1, 1, 1)
+                else:
+                    # Stop if next month in the same year would exceed max_date_py
+                    if current_loop_date_py.year == max_date_py.year and current_loop_date_py.month + 1 > max_date_py.month:
+                        break
+                    current_loop_date_py = date(current_loop_date_py.year, current_loop_date_py.month + 1, 1)
+            # available_year_months = sorted(list(set(available_year_months))) # Sorting handled if loop is correct
         
         if not available_year_months:
-            st.warning("No valid dates available for month/year selection.")
+            st.warning("No valid date range for month/year selection in master schedule.")
         else:
-            month_year_options = {
-                f"{datetime(year, month, 1).strftime('%B %Y')}": (year, month)
-                for year, month in available_year_months
-            }
-            current_dt = datetime.now()
-            default_ym_str = f"{datetime(min_date.year, min_date.month, 1).strftime('%B %Y')}"
-            if (current_dt.year, current_dt.month) in available_year_months:
-                current_month_str = f"{datetime(current_dt.year, current_dt.month, 1).strftime('%B %Y')}"
-                if current_month_str in month_year_options:
-                     default_ym_str = current_month_str
+            month_year_options = { f"{datetime(year, month, 1).strftime('%B %Y')}": (year, month) for year, month in available_year_months }
+            
+            default_ym_str = ""
+            if month_year_options: # Ensure options exist
+                 # Default to min_date_py's month/year if available_year_months was populated
+                min_month_year_str = f"{datetime(min_date_py.year, min_date_py.month, 1).strftime('%B %Y')}"
+                if min_month_year_str in month_year_options:
+                    default_ym_str = min_month_year_str
+
+                current_dt_now = datetime.now()
+                current_month_year_now_str = f"{datetime(current_dt_now.year, current_dt_now.month, 1).strftime('%B %Y')}"
+                if current_month_year_now_str in month_year_options:
+                    default_ym_str = current_month_year_now_str
+            
+            # Determine default index safely
+            default_index = 0
+            if default_ym_str and default_ym_str in month_year_options:
+                default_index = list(month_year_options.keys()).index(default_ym_str)
+
 
             selected_month_year_str = st.sidebar.selectbox(
-                "Select Month and Year:",
-                options=list(month_year_options.keys()),
-                index=list(month_year_options.keys()).index(default_ym_str) if default_ym_str in month_year_options else 0
+                "Select Month and Year:", options=list(month_year_options.keys()),
+                index=default_index, # Use safe default index
+                key="cal_month_year_select"
             )
             selected_year, selected_month = month_year_options[selected_month_year_str]
 
-            # --- Cohort and Unit Selection ---
-            st.sidebar.header("🎓 Filter Options")
-            if not cohort_columns:
-                st.sidebar.warning("No cohort columns available for selection.")
-                selected_cohorts = []
-            else:
-                selected_cohorts = st.sidebar.multiselect(
-                    "Select Cohorts:",
-                    options=cohort_columns, # These are your new column names
-                    default=cohort_columns
-                )
             
-            units_for_selection = ["Orientation"] + available_units
-            
-            if not selected_cohorts:
-                 selected_units = []
-                 st.sidebar.info("Select cohorts to enable unit filtering.")
-            elif not units_for_selection:
-                st.sidebar.warning("No units found for filtering.")
-                selected_units = []
-            else:
-                selected_units = st.sidebar.multiselect(
-                    "Select Units/Activities (leave empty to show all for selected cohorts):",
-                    options=sorted(list(set(units_for_selection))),
-                    default=[]
-                )
+            units_for_cal_ui = ["Orientation"] + all_unit_activities_master
+            selected_units_cal = st.sidebar.multiselect(
+                "Filter by Unit:", options=sorted(list(set(units_for_cal_ui))), default=[],
+                key="cal_unit_ms"
+            )
+            teacher_filter_options_cal = ["Unassigned"] + sorted(list(st.session_state.all_known_teachers))
+            selected_teachers_cal = st.sidebar.multiselect(
+                "Filter by Teacher:", options=teacher_filter_options_cal, default=[],
+                key="cal_teacher_ms"
+            )
 
-            # --- Calendar Display ---
-            if not selected_cohorts:
+            selected_cohorts_cal = st.sidebar.multiselect(
+                "Visible Cohorts:", options=all_cohort_names_master, default=all_cohort_names_master,
+                key="cal_cohort_ms"
+            )
+
+            if not selected_cohorts_cal:
                 st.info("Please select at least one cohort to display data.")
             else:
                 st.subheader(f"Schedule for {selected_month_year_str}")
-                
-                calendar_events = generate_calendar_events(df.copy(), selected_cohorts, selected_units, selected_year, selected_month)
-
-                if not calendar_events:
-                    if selected_units:
-                         st.info(f"No events scheduled for the selected cohorts AND units in this month.")
-                    else:
-                         st.info(f"No events scheduled for the selected cohorts in this month.")
-                
-                calendar_options = {
-                    "headerToolbar": { "left": "", "center": "title", "right": "" },
-                    "initialView": "dayGridMonth",
-                    "initialDate": f"{selected_year}-{selected_month:02d}-01",
-                    "height": "700px",
-                }
-                
-                custom_css = """
-                    .fc-event-main { white-space: normal !important; overflow: hidden; text-overflow: ellipsis; font-size: 0.8em; line-height: 1.2; }
-                    .fc-event { margin-bottom: 1px !important; padding: 1px 2px !important; }
-                """
-                st.markdown(f"<style>{custom_css}</style>", unsafe_allow_html=True)
-
-                calendar_key_parts = [
-                    f"cal-{selected_year}-{selected_month}",
-                    "cohorts-" + "_".join(sorted(selected_cohorts)).replace(" ","_").replace("(","_").replace(")","_"), # Sanitize key
-                    "units-" + "_".join(sorted(selected_units)).replace(" ","_") # Sanitize key
-                ]
-                calendar_key = "-".join(calendar_key_parts)
-
-                calendar_widget = calendar(
-                    events=calendar_events,
-                    options=calendar_options,
-                    key=calendar_key 
+                calendar_events = generate_calendar_events_from_master(
+                    master_schedule_df, selected_cohorts_cal, selected_units_cal, 
+                    selected_teachers_cal, selected_year, selected_month
                 )
+                if not calendar_events: st.info(f"No events match criteria for this month.")
                 
-                # --- Raw Data Expander ---
-                with st.expander("Show Raw Data for Selected Month, Cohorts, and Units"):
-                    # Filter df for the current month first
-                    df_current_month_view = df[
-                        (df['parsed_date'].dt.year == selected_year) &
-                        (df['parsed_date'].dt.month == selected_month)
-                    ].copy() # Use a copy to avoid SettingWithCopyWarning
-
-                    if not df_current_month_view.empty:
-                        if selected_units:
-                            # Create a boolean mask for rows to keep
-                            # Row should be kept if ANY of the selected cohort columns for that row
-                            # contain one of the selected units (or is Orientation).
-                            mask = pd.Series([False] * len(df_current_month_view), index=df_current_month_view.index)
-                            for cohort_col_iter in selected_cohorts:
-                                if cohort_col_iter in df_current_month_view:
-                                    # Check for Orientation
-                                    is_orientation = (df_current_month_view[cohort_col_iter].astype(str).str.lower() == "orientation") & ("Orientation" in selected_units)
-                                    # Check for other selected units
-                                    is_selected_unit = df_current_month_view[cohort_col_iter].astype(str).isin([u for u in selected_units if u.lower() != "orientation"])
-                                    mask |= (is_orientation | is_selected_unit)
-                            
-                            df_display_filtered_by_unit = df_current_month_view[mask]
-                            
-                            display_cols_raw = ['Date'] + [col for col in selected_cohorts if col in df_display_filtered_by_unit.columns]
-                            st.dataframe(df_display_filtered_by_unit[display_cols_raw].dropna(subset=[col for col in selected_cohorts if col in df_display_filtered_by_unit.columns], how='all'))
-
-                        else: # No unit filter, show all for selected cohorts from the month's view
-                            display_cols_raw = ['Date'] + [col for col in selected_cohorts if col in df_current_month_view.columns]
-                            st.dataframe(df_current_month_view[display_cols_raw].dropna(subset=[col for col in selected_cohorts if col in df_current_month_view.columns], how='all'))
-                    else:
-                        st.write("No data for this month to display.")
-
-else:
-    if uploaded_file is None:
-        st.info("👈 Please upload the CSV file to begin.")
+                calendar_options_dict = {
+                    "headerToolbar": { "left": "", "center": "", "right": "" },
+                    "initialView": "dayGridMonth", "height": "800px", "selectable": True,
+                     "initialDate": f"{selected_year}-{selected_month:02d}-01",
+                }
+                custom_css_cal = """
+                    .fc-event-main { white-space: normal !important; overflow: hidden; text-overflow: ellipsis; font-size: 0.85em; line-height: 1.2; }
+                    .fc-event { margin-bottom: 2px !important; padding: 1px 3px !important; border-radius: 4px; }
+                    .st-c1 { background-color: #878787 !important; }
+                """
+                st.markdown(f"<style>{custom_css_cal}</style>", unsafe_allow_html=True)
+                
+                key_suffix_cal = f"{selected_year}-{selected_month}-{'_'.join(sorted(selected_cohorts_cal))}-{'_'.join(sorted(selected_units_cal))}-{'_'.join(sorted(selected_teachers_cal))}"
+                calendar_render_key = f"main_cal_view_{key_suffix_cal}".replace(" ","_").replace("(","_").replace(")","_").replace(".","_").replace("-","_").replace(":","")
+                calendar_output_dict = calendar( events=calendar_events, options=calendar_options_dict, key=calendar_render_key )
+    else:
+        st.info("Master schedule is empty or not loaded correctly. Add data via 'Data Management' tab.")
