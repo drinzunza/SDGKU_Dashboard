@@ -7,7 +7,7 @@
         "DEFAULT": "#7f7f7f"
     },
     "teacher_assignments": {
-        "FSDI Ch 54 (9-12pm)": {
+        "FSDI Ch 54": {
             "101": "Samantha",
             "102": "Samantha",
             "103": "Samantha",
@@ -29,7 +29,7 @@
             "119": "Sergio",
             "120": "Sergio"
         },
-        "FSDI Ch 55 (12-3pm)": {
+        "FSDI Ch 55 (Sat 12)": {
             "101": "Samantha",
             "102": "Samantha",
             "103": "Samantha",
@@ -51,7 +51,7 @@
             "119": "Sergio",
             "120": "Sergio"
         },
-        "FSDI Ch 56 (9-12pm)": {
+        "FSDI Ch 56": {
             "101": "Samantha",
             "102": "Samantha",
             "103": "Samantha",
@@ -73,7 +73,7 @@
             "119": "Sergio",
             "120": "Sergio"
         },
-        "FSDI Ch 57 (12-3pm)": {
+        "FSDI Ch 57 (Sat 12)": {
             "101": "Samantha",
             "102": "Samantha",
             "103": "Samantha",
@@ -88,14 +88,14 @@
             "112": "Rafael",
             "113": "Rafael",
             "114": "Rafael",
-            "115": "Fernanda",
-            "116": "Fernanda",
-            "117": "Fernanda",
+            "115": "Leopoldo",
+            "116": "Isabel",
+            "117": "Parra",
             "118": "Sergio",
             "119": "Sergio",
             "120": "Sergio"
         },
-        "FSDI Ch 58 (9-12pm)": {
+        "FSDI Ch 58": {
             "101": "Samantha",
             "102": "Samantha",
             "103": "Samantha",
@@ -107,47 +107,69 @@
             "109": "Sergio",
             "110": "Sergio",
             "111": "Rafael",
-            "112": "Rafael",
-            "113": "Rafael",
-            "114": "Rafael",
-            "115": "Fernanda",
-            "116": "Fernanda",
-            "117": "Fernanda",
+            "112": "Luis",
+            "113": "Luis",
+            "114": "Luis",
+            "115": "Leopoldo",
+            "116": "Isabel",
+            "117": "Parra",
             "118": "Sergio",
             "119": "Sergio",
             "120": "Sergio"
         },
-        "FSDI Ch 59 (12-3pm)": {
-            "101": "Samantha",
-            "102": "Samantha",
-            "103": "Samantha",
-            "104": "Samantha",
-            "105": "Samantha",
-            "106": "Adrian",
-            "107": "Adrian",
-            "108": "Sergio",
-            "109": "Sergio",
-            "110": "Sergio",
-            "111": "Rafael",
-            "112": "Rafael",
-            "113": "Rafael",
-            "114": "Rafael",
-            "115": "Fernanda",
-            "116": "Fernanda",
-            "117": "Fernanda",
-            "118": "Sergio",
-            "119": "Sergio",
-            "120": "Sergio"
-        },
-        "FSDI Ch 60 (9-12pm)": {
+        "FSDI Ch 59 (Sat 12)": {
             "101": "Samantha",
             "102": "Samantha",
             "103": "Samantha",
             "104": "Fernanda",
             "105": "Fernanda",
-            "106": "Fernanda",
+            "106": "Adrian",
             "107": "Adrian",
-            "108": "Adrian",
+            "108": "Luis",
+            "109": "Sergio",
+            "110": "Leopoldo",
+            "111": "Leopoldo",
+            "112": "Luis",
+            "113": "Luis",
+            "114": "Luis",
+            "115": "Leopoldo",
+            "116": "Isabel",
+            "117": "Parra",
+            "118": "Sergio",
+            "119": "Sergio",
+            "120": "Sergio"
+        },
+        "FSDI Ch 60": {
+            "101": "Samantha",
+            "102": "Samantha",
+            "103": "Samantha",
+            "104": "Fernanda",
+            "105": "Fernanda",
+            "106": "Adrian",
+            "107": "Adrian",
+            "108": "Luis",
+            "109": "Sergio",
+            "110": "Leopoldo",
+            "111": "Leopoldo",
+            "112": "Luis",
+            "113": "Luis",
+            "114": "Luis",
+            "115": "Leopoldo",
+            "116": "Isabel",
+            "117": "Parra",
+            "118": "Sergio",
+            "119": "Sergio",
+            "120": "Sergio"
+        },
+        "FSDI Ch 61 (Sat 12)": {
+            "101": "Samantha",
+            "102": "Samantha",
+            "103": "Samantha",
+            "104": "Fernanda",
+            "105": "Fernanda",
+            "106": "Adrian",
+            "107": "Adrian",
+            "108": "Polo",
             "109": "Leopoldo",
             "110": "Leopoldo",
             "111": "Leopoldo",
@@ -156,20 +178,20 @@
             "114": "Luis",
             "115": "Leopoldo",
             "116": "Isabel",
-            "117": "Sergio",
+            "117": "Parra",
             "118": "Sergio",
             "119": "Sergio",
             "120": "Sergio"
         },
-        "FSDI Ch 61 (12-3pm)": {
+        "FSDI Ch 62": {
             "101": "Samantha",
             "102": "Samantha",
             "103": "Samantha",
             "104": "Fernanda",
             "105": "Fernanda",
-            "106": "Fernanda",
+            "106": "Adrian",
             "107": "Adrian",
-            "108": "Adrian",
+            "108": "Polo",
             "109": "Leopoldo",
             "110": "Leopoldo",
             "111": "Leopoldo",
@@ -178,20 +200,20 @@
             "114": "Luis",
             "115": "Leopoldo",
             "116": "Isabel",
-            "117": "Sergio",
+            "117": "Parra",
             "118": "Sergio",
             "119": "Sergio",
             "120": "Sergio"
         },
-        "FSDI Ch 62 (9-12pm)": {
+        "FSDI Ch 63 (Sat 12)": {
             "101": "Samantha",
             "102": "Samantha",
             "103": "Samantha",
             "104": "Fernanda",
             "105": "Fernanda",
-            "106": "Fernanda",
+            "106": "Adrian",
             "107": "Adrian",
-            "108": "Adrian",
+            "108": "Polo",
             "109": "Leopoldo",
             "110": "Leopoldo",
             "111": "Leopoldo",
@@ -200,20 +222,20 @@
             "114": "Luis",
             "115": "Leopoldo",
             "116": "Isabel",
-            "117": "Sergio",
+            "117": "Parra",
             "118": "Sergio",
             "119": "Sergio",
             "120": "Sergio"
         },
-        "FSDI Ch 63 (12-3pm)": {
+        "FSDI Ch 64": {
             "101": "Samantha",
             "102": "Samantha",
             "103": "Samantha",
             "104": "Fernanda",
             "105": "Fernanda",
-            "106": "Fernanda",
+            "106": "Adrian",
             "107": "Adrian",
-            "108": "Adrian",
+            "108": "Polo",
             "109": "Leopoldo",
             "110": "Leopoldo",
             "111": "Leopoldo",
@@ -222,20 +244,20 @@
             "114": "Luis",
             "115": "Leopoldo",
             "116": "Isabel",
-            "117": "Sergio",
+            "117": "Parra",
             "118": "Sergio",
             "119": "Sergio",
             "120": "Sergio"
         },
-        "FSDI Ch 64 (9-12pm)": {
+        "MDI1 Ch 1 (Sat 12)": {
             "101": "Samantha",
             "102": "Samantha",
             "103": "Samantha",
             "104": "Fernanda",
             "105": "Fernanda",
-            "106": "Fernanda",
+            "106": "Adrian",
             "107": "Adrian",
-            "108": "Adrian",
+            "108": "Polo",
             "109": "Leopoldo",
             "110": "Leopoldo",
             "111": "Leopoldo",
@@ -244,12 +266,12 @@
             "114": "Luis",
             "115": "Leopoldo",
             "116": "Isabel",
-            "117": "Sergio",
+            "117": "Parra",
             "118": "Sergio",
             "119": "Sergio",
             "120": "Sergio"
         },
-        "MDI1 Ch 1 (12-3pm)": {
+        "MDI1 Ch 2": {
             "101": "Samantha",
             "102": "Samantha",
             "103": "Fernanda",
@@ -271,7 +293,7 @@
             "119": "Sergio",
             "120": "Sergio"
         },
-        "MDI1 Ch 2 (9-12pm)": {
+        "MDI1 Ch 3 (Sat 12)": {
             "101": "Samantha",
             "102": "Samantha",
             "103": "Fernanda",
@@ -293,7 +315,7 @@
             "119": "Sergio",
             "120": "Sergio"
         },
-        "MDI1 Ch 3 (12-3pm)": {
+        "MDI1 Ch 4": {
             "101": "Samantha",
             "102": "Samantha",
             "103": "Fernanda",
@@ -315,29 +337,7 @@
             "119": "Sergio",
             "120": "Sergio"
         },
-        "MDI1 Ch 4 (9-12pm)": {
-            "101": "Samantha",
-            "102": "Samantha",
-            "103": "Fernanda",
-            "104": "Fernanda",
-            "105": "Marin",
-            "106": "Marin",
-            "107": "Marin",
-            "108": "Joaquin",
-            "109": "Rafael",
-            "110": "Rafael",
-            "111": "Rafael",
-            "112": "Rafael",
-            "113": "Rafael",
-            "114": "Gaby",
-            "115": "Gaby",
-            "116": "Gaby",
-            "117": "Gaby",
-            "118": "Sergio",
-            "119": "Sergio",
-            "120": "Sergio"
-        },
-        "MDI2 Ch 1 (12-3pm)": {
+        "MDI2 Ch 1 (Sat 12)": {
             "101": "Claudia",
             "102": "Claudia",
             "103": "Claudia",
@@ -359,7 +359,7 @@
             "119": "Rafael",
             "120": "Rafael"
         },
-        "MDI2 Ch 2 (9-12pm)": {
+        "MDI2 Ch 2": {
             "101": "Claudia",
             "102": "Claudia",
             "103": "Claudia",
@@ -381,7 +381,7 @@
             "119": "Rafael",
             "120": "Rafael"
         },
-        "MDI2 Ch 3 (12-3pm)": {
+        "MDI2 Ch 3 (Sat 12)": {
             "101": "Claudia",
             "102": "Claudia",
             "103": "Claudia",
@@ -403,7 +403,7 @@
             "119": "Rafael",
             "120": "Rafael"
         },
-        "MDI2 Ch 4 (9-12pm)": {
+        "MDI2 Ch 4": {
             "101": "Claudia",
             "102": "Claudia",
             "103": "Claudia",
